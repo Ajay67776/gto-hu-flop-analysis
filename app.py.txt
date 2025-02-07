@@ -1,0 +1,130 @@
+import random
+from flask import Flask, render_template_string
+
+app = Flask(__name__)
+
+def generate_deck():
+    """Generates a standard 52-card deck."""
+    suits = ["♠", "♥", "♦", "♣"]  # Spades, Hearts, Diamonds, Clubs
+    ranks = ["A", "K", "Q", "J", "T", "9", "8", "7", "6", "5", "4", "3", "2"]
+    return [rank + suit for rank in ranks for suit in suits]
+
+def generate_hand(deck):
+    """Draws two random cards for a player from the deck."""
+    hand = random.sample(deck, 2)
+    for card in hand:
+        deck.remove(card)
+    return hand
+
+def generate_flop(deck):
+    """Generates a random flop from the remaining deck."""
+    flop = random.sample(deck, 3)
+    for card in flop:
+        deck.remove(card)
+    return flop
+
+def analyze_flop(flop):
+    """Analyzes a flop and suggests GTO strategies."""
+    ranks = [card[:-1] for card in flop]
+    suits = [card[-1] for card in flop]
+
+    unique_ranks = len(set(ranks))
+    unique_suits = len(set(suits))
+
+    if unique_ranks == 1:  # Paired board
+        texture = "Paired Board"
+        strategy = "Polarized betting; focus on trips, full houses, or strong blockers."
+    elif unique_suits == 1:  # Monotone board
+        texture = "Monotone"
+        strategy = "Bet larger with flush draws or suited blockers."
+    elif max(ranks) in ranks and min(ranks) in ranks:  # Wet board
+        texture = "Wet (Connected)"
+        strategy = "Lower c-bet frequency; larger bets with value hands or strong draws."
+    else:  # Default dry board
+        texture = "Dry (Disconnected)"
+        strategy = "High c-bet frequency; smaller bet sizing preferred."
+
+    return texture, strategy
+
+def suggest_action(player_hand, flop, villain_strategy):
+    """Suggests an optimal action based on the player's hand and board texture."""
+    ranks = [card[:-1] for card in player_hand + flop]
+    suits = [card[-1] for card in player_hand + flop]
+
+    # Simplified hand strength evaluation
+    if len(set(ranks)) == len(ranks) - 1:  # Pair or better
+        action = "Bet for value."
+    elif len(set(suits)) == 1:  # Flush draw or flush
+        action = "Bet with semi-bluff or value."
+    elif max(ranks) in ranks and min(ranks) in ranks:  # Straight draw
+        action = "Check or semi-bluff depending on position."
+    else:
+        action = "Check or fold; low equity."
+
+    # Consider villain strategy
+    if villain_strategy == "Aggressive" and action == "Check or fold; low equity.":
+        action = "Consider bluffing if blockers are present."
+
+    return action
+
+@app.route('/')
+def heads_up_simulation():
+    """Simulates a heads-up scenario against a GTO villain and renders the result in HTML."""
+    # Generate deck and hands
+    deck = generate_deck()
+    player_hand = generate_hand(deck)
+    villain_hand = generate_hand(deck)  # Hidden from view
+    flop = generate_flop(deck)
+
+    # Analyze the flop
+    texture, strategy = analyze_flop(flop)
+
+    # Suggest action for the player
+    villain_strategy = "GTO"  # Assuming villain plays GTO
+    action = suggest_action(player_hand, flop, villain_strategy)
+
+    # HTML template
+    html_template = """
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Heads-Up GTO Simulation</title>
+        <style>
+            body { font-family: Arial, sans-serif; text-align: center; margin: 0; padding: 20px; }
+            .card { display: inline-block; margin: 10px; padding: 15px; border: 1px solid #ccc; border-radius: 8px; }
+            .flop, .hand { font-size: 1.5em; }
+            .strategy { margin-top: 20px; }
+        </style>
+    </head>
+    <body>
+        <h1>Heads-Up GTO Simulation</h1>
+        <div class="card">
+            <h2>Flop</h2>
+            <div class="flop">{{ flop[0] }} {{ flop[1] }} {{ flop[2] }}</div>
+        </div>
+        <div class="card">
+            <h2>Your Hand</h2>
+            <div class="hand">{{ player_hand[0] }} {{ player_hand[1] }}</div>
+        </div>
+        <div class="card">
+            <h2>Board Texture</h2>
+            <div class="texture">{{ texture }}</div>
+        </div>
+        <div class="card strategy">
+            <h2>GTO Strategy</h2>
+            <p>{{ strategy }}</p>
+        </div>
+        <div class="card strategy">
+            <h2>Suggested Action</h2>
+            <p>{{ action }}</p>
+        </div>
+    </body>
+    </html>
+    """
+
+    return render_template_string(html_template, flop=flop, player_hand=player_hand, texture=texture, strategy=strategy, action=action)
+
+if __name__ == "__main__":
+    app.run(debug=True)
